@@ -24,12 +24,14 @@ public class PosteringValidator : AbstractValidator<Postering>
             .Must(DatoErIndenForRegnskabsperiode)
             .WithMessage("Posteringsdato skal være inden for regnskabsperioden");
 
-        // Bilagsnummer skal være mellem 1 og 1.000.000
+        // Bilagsnummer skal være mellem -1.000.000 og 1.000.000 (negative = primo)
         RuleFor(p => p.Bilagsnummer)
-            .GreaterThan(0)
-            .WithMessage("Bilagsnummer skal være større end 0")
+            .GreaterThanOrEqualTo(-1_000_000)
+            .WithMessage("Bilagsnummer må ikke være mindre end -1.000.000")
             .LessThanOrEqualTo(1_000_000)
-            .WithMessage("Bilagsnummer må ikke overstige 1.000.000");
+            .WithMessage("Bilagsnummer må ikke overstige 1.000.000")
+            .NotEqual(0)
+            .WithMessage("Bilagsnummer må ikke være 0");
 
         // Konto skal være mellem 1 og 1.000.000 og skal findes i kontoplanen
         RuleFor(p => p.Konto)
@@ -39,6 +41,11 @@ public class PosteringValidator : AbstractValidator<Postering>
             .WithMessage("Kontonummer må ikke overstige 1.000.000")
             .Must(KontoFindesIKontoplan)
             .WithMessage("Kontoen findes ikke i kontoplanen");
+
+        // Primo posteringer (negative bilagsnumre) må kun bogføres på statuskonti
+        RuleFor(p => p)
+            .Must(PrimoPosteringKunPåStatuskonto)
+            .WithMessage("Primo posteringer (negative bilagsnumre) må kun bogføres på statuskonti");
 
         // Tekst skal være mindst 3 tegn
         RuleFor(p => p.Tekst)
@@ -69,5 +76,16 @@ public class PosteringValidator : AbstractValidator<Postering>
     private bool KontoFindesIKontoplan(int kontonummer)
     {
         return _kontoplanService.GetKonto(kontonummer) != null;
+    }
+
+    private bool PrimoPosteringKunPåStatuskonto(Postering postering)
+    {
+        // Hvis det ikke er en primo postering (positive bilagsnummer), så er det ok
+        if (postering.Bilagsnummer > 0)
+            return true;
+
+        // For primo posteringer (negative bilagsnummer) skal kontoen være en statuskonto
+        var konto = _kontoplanService.GetKonto(postering.Konto);
+        return konto != null && string.Equals(konto.Type, "Status", StringComparison.OrdinalIgnoreCase);
     }
 }

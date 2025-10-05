@@ -1,5 +1,5 @@
 nr;navn;type;moms
 100;Gebyr;drift;INDG
 1000;Bank;status;INGEN
-2000;Indgående moms;status;INDG
-3000;Udgående moms;status;UDG
+2000;Tilgodehavnde moms;status;INGEN
+3000;Skyldig moms;status;INGEN

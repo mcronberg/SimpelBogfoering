@@ -40,6 +40,12 @@ public class KontoValidator : AbstractValidator<Konto>
                          string.Equals(moms, "UDG", StringComparison.Ordinal) ||
                          string.Equals(moms, "INGEN", StringComparison.Ordinal))
             .WithMessage("Momstype skal være 'INDG', 'UDG' eller 'INGEN'");
+
+        // Status konti skal altid have momstype INGEN
+        RuleFor(k => k)
+            .Must(konto => !string.Equals(konto.Type, "status", StringComparison.Ordinal) ||
+                          string.Equals(konto.Moms, "INGEN", StringComparison.Ordinal))
+            .WithMessage("Status konti (balancekonti) skal altid have momstype 'INGEN'");
     }
 
     private static bool BeValidType(string type)

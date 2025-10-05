@@ -156,7 +156,7 @@ public class PosteringService
 
             try
             {
-                var postering = ParsePosteringLine(line, filNavn);
+                var postering = ParsePosteringLine(line, filNavn, _regnskabService.Regnskab.PeriodeFra);
 
                 // Validér postering
                 var validationResult = await _validator.ValidateAsync(postering).ConfigureAwait(false);
@@ -187,8 +187,9 @@ public class PosteringService
 
     /// <summary>
     /// Parse en CSV linje til Postering object
+    /// Håndterer primo posteringer (negative bilagsnumre)
     /// </summary>
-    private static Postering ParsePosteringLine(string line, string filNavn)
+    private static Postering ParsePosteringLine(string line, string filNavn, DateTime regnskabStartDato)
     {
         var fields = line.Split(';');
         if (fields.Length != 5)
@@ -198,12 +199,25 @@ public class PosteringService
 
         try
         {
+            var bilagsnummer = ParseInt(fields[1], "Bilagsnummer");
+            var originalTekst = fields[3].Trim();
+            var dato = ParseDato(fields[0]);
+
+            // Håndter primo posteringer (negative bilagsnumre)
+            if (bilagsnummer < 0)
+            {
+                // Primo posteringer skal have regnskabets startdato
+                dato = regnskabStartDato;
+                // Prefix tekst med PRIMO:
+                originalTekst = $"PRIMO: {originalTekst}";
+            }
+
             return new Postering
             {
-                Dato = ParseDato(fields[0]),
-                Bilagsnummer = ParseInt(fields[1], "Bilagsnummer"),
+                Dato = dato,
+                Bilagsnummer = bilagsnummer,
                 Konto = ParseInt(fields[2], "Konto"),
-                Tekst = fields[3].Trim(),
+                Tekst = originalTekst,
                 Beløb = ParseBeløb(fields[4]),
                 CsvFil = filNavn
             };
@@ -296,6 +310,14 @@ public class PosteringService
     public decimal GetSaldoForKonto(int kontonummer)
     {
         return _posteringer.Where(p => p.Konto == kontonummer).Sum(p => p.Beløb);
+    }
+
+    /// <summary>
+    /// Henter alle posteringer
+    /// </summary>
+    public IReadOnlyList<Postering> GetAllePosteringer()
+    {
+        return _posteringer.AsReadOnly();
     }
 
     /// <summary>

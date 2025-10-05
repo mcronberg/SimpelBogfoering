@@ -158,6 +158,14 @@ public class KontoplanService
     }
 
     /// <summary>
+    /// Henter alle konti i kontoplanen
+    /// </summary>
+    public IReadOnlyList<Konto> GetAlleKonti()
+    {
+        return _kontoplan.AsReadOnly();
+    }
+
+    /// <summary>
     /// Finder konti efter type
     /// </summary>
     public IReadOnlyList<Konto> GetKontiByType(string type)
