@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations;
 namespace SimpelBogfoering;
 
 /// <summary>
-/// Klasse for applikationens konfiguration
+/// Klasse for bogføringsapplikationens konfiguration
 /// Bindes til "AppSettings" sektionen i appsettings.json
 /// Kan overskrives via miljøvariabler med prefix "AppSettings__"
 /// </summary>

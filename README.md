@@ -1,6 +1,38 @@
-# .NET Console Application Template
+# Simpel Bogføring - .NET Console Application
 
-This is a production-ready .NET console application template built with modern C# patterns and best practices.
+This is a simple accounting application (bogføringsprogram) built as a production-ready .NET console application template with modern C# patterns and best practices.
+
+## Application Overview
+
+This application simulates a basic accounting system with the following features:
+- Account management (kontoplan)
+- Transaction recording (posteringer)
+- Period-based accounting (regnskabsperioder)
+- VAT handling (momsberegning)
+
+## Data Structure
+
+The application uses a simple file-based data structure in the `/data` folder:
+
+### `regnskab.json`
+Contains main accounting period information:
+- Company name (regnskabsNavn)
+- Period dates (periodeFra/periodeTil)
+- VAT amounts (tilgodehavendeMoms/skyldigMoms)
+
+### `kontoplan.csv`
+Chart of accounts with:
+- Account number (nr)
+- Account name (navn)
+- Account type (type): drift, status
+- VAT code (moms): U25, INGEN
+
+### `posteringer-{month}-{year}.csv`
+Monthly transaction files with:
+- Transaction date (dato)
+- Account number (konto)
+- Description (tekst)
+- Amount (beløb)
 
 ## Architecture Overview
 

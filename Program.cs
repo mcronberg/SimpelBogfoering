@@ -1,12 +1,25 @@
 ﻿using CommandLine;
 using DotNetEnv;
+using FluentValidation;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using SimpelBogfoering;
+using SimpelBogfoering.Services;
+using SimpelBogfoering.Validators;
+using System.Globalization;
 using System.Linq;
+using System.Text;
+
+// Sæt applikationen til at bruge dansk kultur (da-DK) for konsistent formatering
+CultureInfo.DefaultThreadCurrentCulture = new CultureInfo("da-DK");
+CultureInfo.DefaultThreadCurrentUICulture = new CultureInfo("da-DK");
+
+// Sæt standard encoding til UTF-8 for korrekt tegnsæt håndtering
+Console.OutputEncoding = Encoding.UTF8;
+Console.InputEncoding = Encoding.UTF8;
 
 // Indlæs .env fil først - dette gør det muligt at overskrive appsettings.json værdier
 Env.Load();
@@ -116,6 +129,14 @@ static async Task<int> RunApplicationAsync(IConfiguration configuration, Command
 
         // Kør applikationen med en service scope
         using var scope = host.Services.CreateScope();
+
+        // Indlæs regnskabs- og kontoplandata ved startup
+        var regnskabService = scope.ServiceProvider.GetRequiredService<RegnskabService>();
+        await regnskabService.LoadRegnskabAsync().ConfigureAwait(false);
+
+        var kontoplanService = scope.ServiceProvider.GetRequiredService<KontoplanService>();
+        await kontoplanService.LoadKontoplanAsync().ConfigureAwait(false);
+
         var app = scope.ServiceProvider.GetRequiredService<App>();
         return await app.RunAsync(commandArgs).ConfigureAwait(false);
     }
@@ -124,9 +145,7 @@ static async Task<int> RunApplicationAsync(IConfiguration configuration, Command
         Log.Fatal(ex, "Application terminated unexpectedly during execution");
         return 1;
     }
-}
-
-/// <summary>
+}/// <summary>
 /// Opret og konfigurer dependency injection containeren
 /// Registrerer alle services og konfiguration
 /// </summary>
@@ -136,6 +155,9 @@ static IHost CreateHost(IConfiguration configuration, CommandArgs commandArgs)
         .UseSerilog() // Brug Serilog som logging provider
         .ConfigureServices((context, services) =>
         {
+            // Registrer command line arguments som singleton
+            services.AddSingleton(commandArgs);
+
             // Registrer konfiguration
             services.Configure<AppSettings>(configuration.GetSection("AppSettings"));
 
@@ -148,6 +170,13 @@ static IHost CreateHost(IConfiguration configuration, CommandArgs commandArgs)
             // Registrer application services
             services.AddScoped<App>();
             services.AddScoped<DemoService>();
+
+            // Registrer regnskabs og kontoplan services som singleton
+            services.AddSingleton<RegnskabService>();
+            services.AddSingleton<KontoplanService>();
+
+            // Registrer FluentValidation som singleton (så de kan bruges i singleton services)
+            services.AddValidatorsFromAssemblyContaining<RegnskabValidator>(ServiceLifetime.Singleton);
 
             // Juster log niveau baseret på verbose flag
             if (commandArgs.Verbose)

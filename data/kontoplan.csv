@@ -1,0 +1,10 @@
+nr;navn;type;moms
+100;Salg af varer;drift;UDG
+1000;Bank;status;INGEN
+1500;Indgående moms;status;INGEN
+2000;Udgående moms;status;INGEN
+3000;Varekøb;drift;INDG
+4000;Kontorudgifter;drift;INDG
+5000;Løn og gager;drift;INGEN
+6000;Markedsføring;drift;INDG
+9000;Årets resultat;sum:100-8999;INGEN
