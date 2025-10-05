@@ -1,67 +1,73 @@
 using FluentValidation;
 using SimpelBogfoering.Models;
+using SimpelBogfoering.Services;
 
 namespace SimpelBogfoering.Validators;
 
 /// <summary>
-/// Validator for Postering model
-/// Sikrer at posteringsdata er gyldige
+/// Validator for Postering model med forretningsregler
 /// </summary>
 public class PosteringValidator : AbstractValidator<Postering>
 {
-    public PosteringValidator()
+    private readonly RegnskabService _regnskabService;
+    private readonly KontoplanService _kontoplanService;
+
+    public PosteringValidator(RegnskabService regnskabService, KontoplanService kontoplanService)
     {
-        // Dato skal være gyldig og ikke i fremtiden
+        _regnskabService = regnskabService;
+        _kontoplanService = kontoplanService;
+
+        // Dato skal være inden for regnskabsperioden
         RuleFor(p => p.Dato)
             .NotEmpty()
             .WithMessage("Posteringsdato skal være angivet")
-            .Must(BeValidDate)
-            .WithMessage("Posteringsdato skal være en gyldig dato")
-            .LessThanOrEqualTo(DateTime.Today)
-            .WithMessage("Posteringsdato kan ikke være i fremtiden");
+            .Must(DatoErIndenForRegnskabsperiode)
+            .WithMessage("Posteringsdato skal være inden for regnskabsperioden");
 
-        // Kontonummer skal være positivt
+        // Bilagsnummer skal være mellem 1 og 1.000.000
+        RuleFor(p => p.Bilagsnummer)
+            .GreaterThan(0)
+            .WithMessage("Bilagsnummer skal være større end 0")
+            .LessThanOrEqualTo(1_000_000)
+            .WithMessage("Bilagsnummer må ikke overstige 1.000.000");
+
+        // Konto skal være mellem 1 og 1.000.000 og skal findes i kontoplanen
         RuleFor(p => p.Konto)
             .GreaterThan(0)
             .WithMessage("Kontonummer skal være større end 0")
-            .LessThanOrEqualTo(9999)
-            .WithMessage("Kontonummer må ikke overstige 9999");
+            .LessThanOrEqualTo(1_000_000)
+            .WithMessage("Kontonummer må ikke overstige 1.000.000")
+            .Must(KontoFindesIKontoplan)
+            .WithMessage("Kontoen findes ikke i kontoplanen");
 
-        // Tekst skal være udfyldt
+        // Tekst skal være mindst 3 tegn
         RuleFor(p => p.Tekst)
             .NotEmpty()
-            .WithMessage("Posteringstekst må ikke være tom")
+            .WithMessage("Posteringstekst skal være angivet")
             .MinimumLength(3)
             .WithMessage("Posteringstekst skal være mindst 3 tegn")
-            .MaximumLength(100)
-            .WithMessage("Posteringstekst må maksimalt være 100 tegn");
+            .MaximumLength(200)
+            .WithMessage("Posteringstekst må maksimalt være 200 tegn");
 
-        // Beløb skal være forskelligt fra 0
+        // Beløb må ikke være nul
         RuleFor(p => p.Beløb)
             .NotEqual(0)
-            .WithMessage("Posteringsbeløb kan ikke være 0")
-            .Must(BeReasonableAmount)
-            .WithMessage("Posteringsbeløb skal være mellem -1.000.000 og 1.000.000");
+            .WithMessage("Beløb må ikke være nul");
 
-        // Dato må ikke være ældre end 10 år
-        RuleFor(p => p.Dato)
-            .GreaterThan(DateTime.Today.AddYears(-10))
-            .WithMessage("Posteringsdato må ikke være ældre end 10 år");
+        // CSV fil skal være angivet
+        RuleFor(p => p.CsvFil)
+            .NotEmpty()
+            .WithMessage("CSV filnavn skal være angivet");
     }
 
-    /// <summary>
-    /// Validerer om en dato er gyldig og ikke default værdi
-    /// </summary>
-    private static bool BeValidDate(DateTime date)
+    private bool DatoErIndenForRegnskabsperiode(DateTime dato)
     {
-        return date != default && date > new DateTime(1900, 1, 1);
+        var regnskab = _regnskabService.Regnskab;
+        return dato >= regnskab.PeriodeFra && dato <= regnskab.PeriodeTil;
     }
 
-    /// <summary>
-    /// Validerer om beløbet er rimeligt (ikke ekstreme værdier)
-    /// </summary>
-    private static bool BeReasonableAmount(decimal amount)
+    private bool KontoFindesIKontoplan(int kontonummer)
     {
-        return Math.Abs(amount) <= 1_000_000m; // Max 1 million kr
+        return _kontoplanService.GetKonto(kontonummer) != null;
     }
 }

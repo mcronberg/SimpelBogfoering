@@ -137,6 +137,13 @@ static async Task<int> RunApplicationAsync(IConfiguration configuration, Command
         var kontoplanService = scope.ServiceProvider.GetRequiredService<KontoplanService>();
         await kontoplanService.LoadKontoplanAsync().ConfigureAwait(false);
 
+        // Validér at momskonti findes i kontoplanen efter begge er indlæst
+        regnskabService.ValidateMomsKontiExistInKontoplan(kontoplanService);
+
+        // Indlæs posteringer (kan være tomme hvis ingen posteringer-*.csv filer findes)
+        var posteringService = scope.ServiceProvider.GetRequiredService<PosteringService>();
+        await posteringService.LoadPosteringerAsync().ConfigureAwait(false);
+
         var app = scope.ServiceProvider.GetRequiredService<App>();
         return await app.RunAsync(commandArgs).ConfigureAwait(false);
     }
@@ -174,6 +181,7 @@ static IHost CreateHost(IConfiguration configuration, CommandArgs commandArgs)
             // Registrer regnskabs og kontoplan services som singleton
             services.AddSingleton<RegnskabService>();
             services.AddSingleton<KontoplanService>();
+            services.AddSingleton<PosteringService>();
 
             // Registrer FluentValidation som singleton (så de kan bruges i singleton services)
             services.AddValidatorsFromAssemblyContaining<RegnskabValidator>(ServiceLifetime.Singleton);

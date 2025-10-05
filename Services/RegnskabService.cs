@@ -94,6 +94,7 @@ public class RegnskabService
         var periodeTil = ParseDate(dataRow[2], "periodeTil");
         var kontoTilgodehavendeMoms = ParseInt(dataRow[3], "kontoTilgodehavendeMoms");
         var kontoSkyldigMoms = ParseInt(dataRow[4], "kontoSkyldigMoms");
+        var momsProcent = ParseDecimal(dataRow[5], "momsProcent");
 
         return new Regnskab
         {
@@ -101,20 +102,22 @@ public class RegnskabService
             PeriodeFra = periodeFra,
             PeriodeTil = periodeTil,
             KontoTilgodehavendeMoms = kontoTilgodehavendeMoms,
-            KontoSkyldigMoms = kontoSkyldigMoms
+            KontoSkyldigMoms = kontoSkyldigMoms,
+            MomsProcent = momsProcent
         };
     }
 
     private static void ValidateRegnskabCsvHeader(string[] header, string[] dataRow)
     {
-        if (header.Length != 5 || dataRow.Length != 5 ||
+        if (header.Length != 6 || dataRow.Length != 6 ||
             !string.Equals(header[0], "regnskabsNavn", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(header[1], "periodeFra", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(header[2], "periodeTil", StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(header[3], "kontoTilgodehavendeMoms", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(header[4], "kontoSkyldigMoms", StringComparison.OrdinalIgnoreCase))
+            !string.Equals(header[4], "kontoSkyldigMoms", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(header[5], "momsProcent", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Regnskab CSV-fil skal have header: regnskabsNavn;periodeFra;periodeTil;kontoTilgodehavendeMoms;kontoSkyldigMoms");
+            throw new InvalidOperationException("Regnskab CSV-fil skal have header: regnskabsNavn;periodeFra;periodeTil;kontoTilgodehavendeMoms;kontoSkyldigMoms;momsProcent");
         }
     }
 
@@ -136,6 +139,17 @@ public class RegnskabService
         return result;
     }
 
+    private static decimal ParseDecimal(string value, string fieldName)
+    {
+        // Understøt både komma og punktum som decimalseparator
+        var normalizedValue = value.Replace(',', '.');
+        if (!decimal.TryParse(normalizedValue, NumberStyles.Number, CultureInfo.InvariantCulture, out var result))
+        {
+            throw new InvalidOperationException($"Ugyldigt {fieldName}: {value}");
+        }
+        return result;
+    }
+
     /// <summary>
     /// Tjekker om regnskabsdata er indlæst
     /// </summary>
@@ -150,5 +164,34 @@ public class RegnskabService
             return "Regnskab ikke indlæst";
 
         return $"{_regnskab!.RegnskabsNavn} ({_regnskab.PeriodeFra:yyyy-MM-dd} - {_regnskab.PeriodeTil:yyyy-MM-dd})";
+    }
+
+    /// <summary>
+    /// Validerer at momskonti findes i kontoplanen når momsprocent > 0
+    /// Skal kaldes efter at både regnskab og kontoplan er indlæst
+    /// </summary>
+    public void ValidateMomsKontiExistInKontoplan(Services.KontoplanService kontoplanService)
+    {
+        if (!IsLoaded)
+            throw new InvalidOperationException("Regnskab skal være indlæst før kontoplan validering");
+
+        if (_regnskab!.MomsProcent > 0)
+        {
+            // Check tilgodehavende moms konto
+            if (kontoplanService.GetKonto(_regnskab.KontoTilgodehavendeMoms) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Konto for tilgodehavende moms ({_regnskab.KontoTilgodehavendeMoms}) findes ikke i kontoplanen");
+            }
+
+            // Check skyldig moms konto
+            if (kontoplanService.GetKonto(_regnskab.KontoSkyldigMoms) == null)
+            {
+                throw new InvalidOperationException(
+                    $"Konto for skyldig moms ({_regnskab.KontoSkyldigMoms}) findes ikke i kontoplanen");
+            }
+
+            _logger.LogDebug("Momskonti valideret succesfuldt i kontoplanen");
+        }
     }
 }

@@ -15,15 +15,17 @@ public class App
     private readonly DemoService _demoService;
     private readonly RegnskabService _regnskabService;
     private readonly KontoplanService _kontoplanService;
+    private readonly PosteringService _posteringService;
     private readonly CommandArgs _commandArgs;
 
-    public App(ILogger<App> logger, IOptions<AppSettings> appSettings, DemoService demoService, RegnskabService regnskabService, KontoplanService kontoplanService, CommandArgs commandArgs)
+    public App(ILogger<App> logger, IOptions<AppSettings> appSettings, DemoService demoService, RegnskabService regnskabService, KontoplanService kontoplanService, PosteringService posteringService, CommandArgs commandArgs)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _appSettings = appSettings.Value ?? throw new ArgumentNullException(nameof(appSettings));
         _demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
         _regnskabService = regnskabService ?? throw new ArgumentNullException(nameof(regnskabService));
         _kontoplanService = kontoplanService ?? throw new ArgumentNullException(nameof(kontoplanService));
+        _posteringService = posteringService ?? throw new ArgumentNullException(nameof(posteringService));
         _commandArgs = commandArgs ?? throw new ArgumentNullException(nameof(commandArgs));
     }
 
@@ -45,41 +47,20 @@ public class App
                 _logger.LogDebug("Application settings loaded: {ApplicationTitle}", _appSettings.ApplicationTitle);
             }
 
-            // Vis regnskabs- og kontoplanoplysninger
-            _logger.LogInformation("Regnskabsdata indlæst: {RegnskabInfo}", _regnskabService.GetRegnskabInfo());
-            _logger.LogInformation("Kontoplan indlæst: {AntalKonti} konti", _kontoplanService.GetAllKonti().Count);
+            // Vis oversigt over indlæste data
+            ShowDataOverview();
 
             // Forbered output mappe
             PrepareOutputDirectory();
 
+            // Vis detaljerede informationer i verbose mode
             if (args.Verbose)
             {
-                var regnskab = _regnskabService.Regnskab;
-                _logger.LogDebug("Regnskabsdetaljer: Navn={RegnskabsNavn}, Periode={PeriodeFra:yyyy-MM-dd} til {PeriodeTil:yyyy-MM-dd}",
-                    regnskab.RegnskabsNavn, regnskab.PeriodeFra, regnskab.PeriodeTil);
-                _logger.LogDebug("Momskonti: Tilgodehavende={KontoTilgodehavende}, Skyldig={KontoSkyldig}",
-                    regnskab.KontoTilgodehavendeMoms, regnskab.KontoSkyldigMoms);
-
-                _logger.LogDebug("Kontoplan oversigt:");
-                foreach (var konto in _kontoplanService.GetAllKonti())
-                {
-                    _logger.LogDebug("  {Konto}", konto);
-                }
+                ShowDetailedInformation();
             }
 
             // Kør demo operationer
-            _logger.LogDebug("Executing demo service operations...");
-
-            var result = await _demoService.PerformDemoOperationAsync(args.Verbose).ConfigureAwait(false);
-            _logger.LogInformation("Demo service result: {Result}", result);
-
-            // Demonstrer error handling
-            _demoService.DemonstrateErrorHandling();
-
-            if (args.Verbose)
-            {
-                _logger.LogInformation("All operations completed successfully");
-            }
+            await RunDemoOperations(args).ConfigureAwait(false);
 
             _logger.LogInformation("{ApplicationTitle} finished successfully", _appSettings.ApplicationTitle);
             return 0; // Success exit code
@@ -88,6 +69,116 @@ public class App
         {
             _logger.LogError(ex, "A critical error occurred while running {ApplicationTitle}", _appSettings.ApplicationTitle);
             return 1; // Error exit code
+        }
+    }
+
+    /// <summary>
+    /// Viser oversigt over indlæste data
+    /// </summary>
+    private void ShowDataOverview()
+    {
+        _logger.LogInformation("Regnskabsdata indlæst: {RegnskabInfo}", _regnskabService.GetRegnskabInfo());
+        _logger.LogInformation("Kontoplan indlæst: {AntalKonti} konti", _kontoplanService.GetAllKonti().Count);
+        _logger.LogInformation("Posteringer indlæst: {AntalPosteringer} posteringer", _posteringService.Posteringer.Count);
+    }
+
+    /// <summary>
+    /// Viser detaljerede informationer i verbose mode
+    /// </summary>
+    private void ShowDetailedInformation()
+    {
+        ShowRegnskabDetails();
+        ShowKontoplanDetails();
+        ShowPosteringerDetails();
+    }
+
+    /// <summary>
+    /// Viser regnskabsdetaljer
+    /// </summary>
+    private void ShowRegnskabDetails()
+    {
+        var regnskab = _regnskabService.Regnskab;
+        _logger.LogDebug("Regnskabsdetaljer: Navn={RegnskabsNavn}, Periode={PeriodeFra:yyyy-MM-dd} til {PeriodeTil:yyyy-MM-dd}",
+            regnskab.RegnskabsNavn, regnskab.PeriodeFra, regnskab.PeriodeTil);
+        _logger.LogDebug("Momskonti: Tilgodehavende={KontoTilgodehavende}, Skyldig={KontoSkyldig}",
+            regnskab.KontoTilgodehavendeMoms, regnskab.KontoSkyldigMoms);
+        _logger.LogDebug("Momsprocent: {MomsProcent:P2} ({MomsProcentDecimal:F2})",
+            regnskab.MomsProcent, regnskab.MomsProcent);
+    }
+
+    /// <summary>
+    /// Viser kontoplandetaljer
+    /// </summary>
+    private void ShowKontoplanDetails()
+    {
+        _logger.LogDebug("Kontoplan oversigt:");
+        foreach (var konto in _kontoplanService.GetAllKonti())
+        {
+            _logger.LogDebug("  {Konto}", konto);
+        }
+    }
+
+    /// <summary>
+    /// Viser posteringsdetaljer
+    /// </summary>
+    private void ShowPosteringerDetails()
+    {
+        if (!_posteringService.Posteringer.Any())
+        {
+            _logger.LogDebug("Ingen posteringer fundet");
+            return;
+        }
+
+        _logger.LogDebug("Posteringer oversigt:");
+
+        // Gruppér posteringer pr. CSV fil
+        var posteringerPrFil = _posteringService.Posteringer
+            .GroupBy(p => p.CsvFil, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var filGruppe in posteringerPrFil)
+        {
+            var filBalance = filGruppe.Sum(p => p.Beløb);
+            _logger.LogDebug("  Fil: {FilNavn} - {AntalPosteringer} posteringer, balance: {Balance:C}",
+                filGruppe.Key, filGruppe.Count(), filBalance);
+
+            foreach (var postering in filGruppe.OrderBy(p => p.Dato).ThenBy(p => p.Bilagsnummer))
+            {
+                _logger.LogDebug("    {Postering}", postering);
+            }
+        }
+
+        // Vis konti med posteringer
+        var kontiMedPosteringer = _posteringService.Posteringer
+            .GroupBy(p => p.Konto)
+            .OrderBy(g => g.Key);
+
+        _logger.LogDebug("Konti med posteringer:");
+        foreach (var kontoGruppe in kontiMedPosteringer)
+        {
+            var konto = _kontoplanService.GetKonto(kontoGruppe.Key);
+            var saldo = _posteringService.GetSaldoForKonto(kontoGruppe.Key);
+            _logger.LogDebug("  Konto {KontoNr} ({KontoNavn}): {AntalPosteringer} posteringer, saldo: {Saldo:C}",
+                kontoGruppe.Key, konto?.Navn ?? "Ukendt", kontoGruppe.Count(), saldo);
+        }
+    }
+
+    /// <summary>
+    /// Kører demo operationer
+    /// </summary>
+    private async Task RunDemoOperations(CommandArgs args)
+    {
+        _logger.LogDebug("Executing demo service operations...");
+
+        var result = await _demoService.PerformDemoOperationAsync(args.Verbose).ConfigureAwait(false);
+        _logger.LogInformation("Demo service result: {Result}", result);
+
+        // Demonstrer error handling
+        _demoService.DemonstrateErrorHandling();
+
+        if (args.Verbose)
+        {
+            _logger.LogInformation("All operations completed successfully");
         }
     }
 

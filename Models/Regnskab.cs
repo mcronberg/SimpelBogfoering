@@ -30,4 +30,9 @@ public class Regnskab
     /// Konto for skyldig moms (kontonummer som int)
     /// </summary>
     public int KontoSkyldigMoms { get; set; }
+
+    /// <summary>
+    /// Momsprocent som decimal (f.eks. 0.25 for 25%)
+    /// </summary>
+    public decimal MomsProcent { get; set; }
 }

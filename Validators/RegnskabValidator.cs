@@ -44,19 +44,39 @@ public class RegnskabValidator : AbstractValidator<Regnskab>
             .Must(r => (r.PeriodeTil - r.PeriodeFra).TotalDays <= 731) // 2 år + 1 dag for skudår
             .WithMessage("Regnskabsperioden må ikke overstige 2 år");
 
-        // Konto for tilgodehavende moms skal være et gyldigt kontonummer
-        RuleFor(r => r.KontoTilgodehavendeMoms)
-            .GreaterThan(0)
-            .WithMessage("Konto for tilgodehavende moms skal være større end 0")
-            .LessThanOrEqualTo(1_000_000)
-            .WithMessage("Konto for tilgodehavende moms må ikke overstige 1.000.000");
+        // Momsprocent skal være mellem 0 og 0.5 (0% til 50%)
+        RuleFor(r => r.MomsProcent)
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Momsprocent skal være 0 eller større")
+            .LessThan(0.5m)
+            .WithMessage("Momsprocent skal være mindre end 0,5 (50%)");
 
-        // Konto for skyldig moms skal være et gyldigt kontonummer
+        // Conditionale moms validering baseret på momsprocent
+        RuleFor(r => r.KontoTilgodehavendeMoms)
+            .Must((regnskab, konto) => ValidateBasicMomsKonto(regnskab, konto))
+            .WithMessage("Hvis momsprocent er 0 skal tilgodehavende moms konto være 0, ellers skal den være >0 og ≤1.000.000");
+
         RuleFor(r => r.KontoSkyldigMoms)
-            .GreaterThan(0)
-            .WithMessage("Konto for skyldig moms skal være større end 0")
-            .LessThanOrEqualTo(1_000_000)
-            .WithMessage("Konto for skyldig moms må ikke overstige 1.000.000");
+            .Must((regnskab, konto) => ValidateBasicMomsKonto(regnskab, konto))
+            .WithMessage("Hvis momsprocent er 0 skal skyldig moms konto være 0, ellers skal den være >0 og ≤1.000.000");
+    }
+
+    /// <summary>
+    /// Validerer basic moms konto regler baseret på momsprocent (uden kontoplan check)
+    /// </summary>
+    private static bool ValidateBasicMomsKonto(Regnskab regnskab, int konto)
+    {
+        if (regnskab.MomsProcent == 0)
+        {
+            // Hvis momsprocent er 0, skal moms konti være 0
+            return konto == 0;
+        }
+        else
+        {
+            // Hvis momsprocent > 0, skal moms konti være >0 og ≤1.000.000
+            // Kontoplan check skal ske senere efter kontoplan er indlæst
+            return konto > 0 && konto <= 1_000_000;
+        }
     }
 
     /// <summary>
