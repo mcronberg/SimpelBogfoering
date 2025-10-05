@@ -12,17 +12,15 @@ public class App
 {
     private readonly ILogger<App> _logger;
     private readonly AppSettings _appSettings;
-    private readonly DemoService _demoService;
     private readonly RegnskabService _regnskabService;
     private readonly KontoplanService _kontoplanService;
     private readonly PosteringService _posteringService;
     private readonly CommandArgs _commandArgs;
 
-    public App(ILogger<App> logger, IOptions<AppSettings> appSettings, DemoService demoService, RegnskabService regnskabService, KontoplanService kontoplanService, PosteringService posteringService, CommandArgs commandArgs)
+    public App(ILogger<App> logger, IOptions<AppSettings> appSettings, RegnskabService regnskabService, KontoplanService kontoplanService, PosteringService posteringService, CommandArgs commandArgs)
     {
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _appSettings = appSettings.Value ?? throw new ArgumentNullException(nameof(appSettings));
-        _demoService = demoService ?? throw new ArgumentNullException(nameof(demoService));
         _regnskabService = regnskabService ?? throw new ArgumentNullException(nameof(regnskabService));
         _kontoplanService = kontoplanService ?? throw new ArgumentNullException(nameof(kontoplanService));
         _posteringService = posteringService ?? throw new ArgumentNullException(nameof(posteringService));
@@ -35,7 +33,7 @@ public class App
     /// </summary>
     /// <param name="args">Parsede kommandolinje argumenter</param>
     /// <returns>Exit code for applikationen (0 = success, 1 = error)</returns>
-    public async Task<int> RunAsync(CommandArgs args)
+    public Task<int> RunAsync(CommandArgs args)
     {
         try
         {
@@ -59,16 +57,13 @@ public class App
                 ShowDetailedInformation();
             }
 
-            // Kør demo operationer
-            await RunDemoOperations(args).ConfigureAwait(false);
-
             _logger.LogInformation("{ApplicationTitle} finished successfully", _appSettings.ApplicationTitle);
-            return 0; // Success exit code
+            return Task.FromResult(0); // Success exit code
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "A critical error occurred while running {ApplicationTitle}", _appSettings.ApplicationTitle);
-            return 1; // Error exit code
+            return Task.FromResult(1); // Error exit code
         }
     }
 
@@ -139,7 +134,7 @@ public class App
         foreach (var filGruppe in posteringerPrFil)
         {
             var filBalance = filGruppe.Sum(p => p.Beløb);
-            _logger.LogDebug("  Fil: {FilNavn} - {AntalPosteringer} posteringer, balance: {Balance:C}",
+            _logger.LogDebug("  Fil: {FilNavn} - {AntalPosteringer} posteringer, balance: {Balance:F2} kr",
                 filGruppe.Key, filGruppe.Count(), filBalance);
 
             foreach (var postering in filGruppe.OrderBy(p => p.Dato).ThenBy(p => p.Bilagsnummer))
@@ -158,27 +153,8 @@ public class App
         {
             var konto = _kontoplanService.GetKonto(kontoGruppe.Key);
             var saldo = _posteringService.GetSaldoForKonto(kontoGruppe.Key);
-            _logger.LogDebug("  Konto {KontoNr} ({KontoNavn}): {AntalPosteringer} posteringer, saldo: {Saldo:C}",
+            _logger.LogDebug("  Konto {KontoNr} ({KontoNavn}): {AntalPosteringer} posteringer, saldo: {Saldo:F2} kr",
                 kontoGruppe.Key, konto?.Navn ?? "Ukendt", kontoGruppe.Count(), saldo);
-        }
-    }
-
-    /// <summary>
-    /// Kører demo operationer
-    /// </summary>
-    private async Task RunDemoOperations(CommandArgs args)
-    {
-        _logger.LogDebug("Executing demo service operations...");
-
-        var result = await _demoService.PerformDemoOperationAsync(args.Verbose).ConfigureAwait(false);
-        _logger.LogInformation("Demo service result: {Result}", result);
-
-        // Demonstrer error handling
-        _demoService.DemonstrateErrorHandling();
-
-        if (args.Verbose)
-        {
-            _logger.LogInformation("All operations completed successfully");
         }
     }
 

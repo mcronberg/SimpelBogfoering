@@ -140,7 +140,7 @@ static async Task<int> RunApplicationAsync(IConfiguration configuration, Command
         // Validér at momskonti findes i kontoplanen efter begge er indlæst
         regnskabService.ValidateMomsKontiExistInKontoplan(kontoplanService);
 
-        // Indlæs posteringer (kan være tomme hvis ingen posteringer-*.csv filer findes)
+        // Indlæs posteringer (kan være tomme hvis ingen posteringer*.csv filer findes)
         var posteringService = scope.ServiceProvider.GetRequiredService<PosteringService>();
         await posteringService.LoadPosteringerAsync().ConfigureAwait(false);
 
@@ -176,7 +176,6 @@ static IHost CreateHost(IConfiguration configuration, CommandArgs commandArgs)
 
             // Registrer application services
             services.AddScoped<App>();
-            services.AddScoped<DemoService>();
 
             // Registrer regnskabs og kontoplan services som singleton
             services.AddSingleton<RegnskabService>();

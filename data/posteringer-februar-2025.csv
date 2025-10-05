@@ -3,9 +3,9 @@ Dato;Bilagsnummer;Konto;Tekst;Beløb
 01-02-2025;2001;1000;Indgået betaling kunde A;12000,00
 05-02-2025;2002;4000;Telefon og internet;-1200,00
 05-02-2025;2002;1000;Betalt telefon;1200,00
-10-02-2025;2003;5000;Konsulenthonorar;-8500,00
-10-02-2025;2003;1000;Betalt konsulent;8500,00
+10-02-2025;2003;6000;Markedsføring;-2000,00
+10-02-2025;2003;1000;Betalt markedsføring;2000,00
 15-02-2025;2004;100;Salg til kunde B;-18000,00
 15-02-2025;2004;1000;Indgået betaling kunde B;18000,00
-28-02-2025;2005;4000;Forsikringer;-2800,00
-28-02-2025;2005;1000;Betalt forsikring;2800,00
+28-02-2025;2005;3000;Varekøb;-3000,00
+28-02-2025;2005;1000;Betalt varekøb;3000,00

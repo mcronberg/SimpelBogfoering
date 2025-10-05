@@ -9,33 +9,37 @@ namespace SimpelBogfoering.Services;
 
 /// <summary>
 /// Service til håndtering af posteringer fra CSV filer
-/// Indlæser og validerer posteringer fra filer med format "posteringer-*.csv"
+/// Indlæser og validerer posteringer fra filer med format "posteringer*.csv"
 /// </summary>
 public class PosteringService
 {
     private readonly ILogger<PosteringService> _logger;
     private readonly CommandArgs _commandArgs;
     private readonly PosteringValidator _validator;
+    private readonly RegnskabService _regnskabService;
+    private readonly KontoplanService _kontoplanService;
     private List<Postering> _posteringer = new();
 
     public PosteringService(
         ILogger<PosteringService> logger,
         CommandArgs commandArgs,
-        PosteringValidator validator)
+        PosteringValidator validator,
+        RegnskabService regnskabService,
+        KontoplanService kontoplanService)
     {
         _logger = logger;
         _commandArgs = commandArgs;
         _validator = validator;
-    }
-
-    /// <summary>
-    /// Alle indlæste posteringer
-    /// </summary>
+        _regnskabService = regnskabService;
+        _kontoplanService = kontoplanService;
+    }    /// <summary>
+         /// Alle indlæste posteringer
+         /// </summary>
     public IReadOnlyList<Postering> Posteringer => _posteringer.AsReadOnly();
 
     /// <summary>
     /// Indlæs alle posteringer fra CSV filer i input directory
-    /// Filer skal have format "posteringer-*.csv"
+    /// Filer skal have format "posteringer*.csv"
     /// </summary>
     public async Task LoadPosteringerAsync()
     {
@@ -43,11 +47,11 @@ public class PosteringService
 
         try
         {
-            var posteringerFiler = Directory.GetFiles(_commandArgs.Input, "posteringer-*.csv", SearchOption.TopDirectoryOnly);
+            var posteringerFiler = Directory.GetFiles(_commandArgs.Input, "posteringer*.csv", SearchOption.TopDirectoryOnly);
 
             if (posteringerFiler.Length == 0)
             {
-                _logger.LogWarning("Ingen posteringer-*.csv filer fundet i: {InputPath}", _commandArgs.Input);
+                _logger.LogWarning("Ingen posteringer*.csv filer fundet i: {InputPath}", _commandArgs.Input);
                 return;
             }
 
@@ -68,7 +72,7 @@ public class PosteringService
                     {
                         var filNavn = Path.GetFileName(filePath);
                         throw new InvalidOperationException(
-                            $"Fil {filNavn} balancerer ikke (sum: {filBalance:C}). " +
+                            $"Fil {filNavn} balancerer ikke (sum: {filBalance:F2} kr). " +
                             "Summen af alle posteringer i hver fil skal være 0.");
                     }
 
@@ -80,6 +84,9 @@ public class PosteringService
             _posteringer = allePosteringer;
             _logger.LogInformation("Indlæste i alt {AntalPosteringer} posteringer fra {AntalFiler} filer",
                 _posteringer.Count, posteringerFiler.Length);
+
+            // Generer automatiske momsposteringer
+            await GenerateAutomaticMomsPosteringerAsync().ConfigureAwait(false);
         }
         catch (Exception ex)
         {
@@ -289,5 +296,156 @@ public class PosteringService
     public decimal GetSaldoForKonto(int kontonummer)
     {
         return _posteringer.Where(p => p.Konto == kontonummer).Sum(p => p.Beløb);
+    }
+
+    /// <summary>
+    /// Generer automatiske momsposteringer baseret på kontoplanens momstyper
+    /// </summary>
+    private async Task GenerateAutomaticMomsPosteringerAsync()
+    {
+        var regnskab = _regnskabService.Regnskab;
+
+        // Hvis momsprocent er 0, generer ingen momsposteringer
+        if (regnskab.MomsProcent == 0)
+        {
+            _logger.LogDebug("Momsprocent er 0 - ingen automatiske momsposteringer genereres");
+            return;
+        }
+
+        _logger.LogInformation("Genererer automatiske momsposteringer med momsprocent {MomsProcent:P2}", regnskab.MomsProcent);
+
+        var nyeMomsPosteringer = GenerateMomsPosteringerForAllePosteringer(regnskab);
+        await ValidateAndAddMomsPosteringerAsync(nyeMomsPosteringer).ConfigureAwait(false);
+    }
+
+    private List<Postering> GenerateMomsPosteringerForAllePosteringer(Regnskab regnskab)
+    {
+        // Kopier liste for at undgå modification during iteration
+        var originalPosteringer = _posteringer.ToList();
+        var nyeMomsPosteringer = new List<Postering>();
+
+        foreach (var postering in originalPosteringer)
+        {
+            var momsPosteringer = GenerateMomsPosteringerForPosteringIfApplicable(postering, regnskab);
+            nyeMomsPosteringer.AddRange(momsPosteringer);
+        }
+
+        return nyeMomsPosteringer;
+    }
+
+    private List<Postering> GenerateMomsPosteringerForPosteringIfApplicable(Postering postering, Regnskab regnskab)
+    {
+        var konto = _kontoplanService.GetKonto(postering.Konto);
+        if (string.Equals(konto?.Moms, "INGEN", StringComparison.OrdinalIgnoreCase))
+        {
+            return new List<Postering>(); // Skip konti uden moms
+        }
+
+        // Beregn moms fra brutto beløb (inklusive moms) til netto momsbeløb
+        // Formel: momsBeløb = bruttoBeløb * (momsprocent / (1 + momsprocent))
+        decimal momsBeløb = Math.Round(Math.Abs(postering.Beløb) * (regnskab.MomsProcent / (1 + regnskab.MomsProcent)), 2);
+
+        if (string.Equals(konto?.Moms, "INDG", StringComparison.OrdinalIgnoreCase)) // Indgående moms (køb/udgifter)
+        {
+            return CreateMomsPosteringerForIndgående(postering, momsBeløb, regnskab.KontoTilgodehavendeMoms);
+        }
+        else if (string.Equals(konto?.Moms, "UDG", StringComparison.OrdinalIgnoreCase)) // Udgående moms (salg/indtægter)
+        {
+            return CreateMomsPosteringerForUdgående(postering, momsBeløb, regnskab.KontoSkyldigMoms);
+        }
+
+        return new List<Postering>();
+    }
+
+    private async Task ValidateAndAddMomsPosteringerAsync(List<Postering> nyeMomsPosteringer)
+    {
+        if (nyeMomsPosteringer.Any())
+        {
+            // Validér alle nye momsposteringer
+            foreach (var momsPostering in nyeMomsPosteringer)
+            {
+                var validationResult = await _validator.ValidateAsync(momsPostering).ConfigureAwait(false);
+                if (!validationResult.IsValid)
+                {
+                    var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
+                    throw new InvalidOperationException($"Automatisk genereret momspostering er ugyldig: {errors}");
+                }
+            }
+
+            _posteringer.AddRange(nyeMomsPosteringer);
+            _logger.LogInformation("Genererede {AntalMomsPosteringer} automatiske momsposteringer", nyeMomsPosteringer.Count);
+        }
+        else
+        {
+            _logger.LogDebug("Ingen konti med moms fundet - ingen momsposteringer genereret");
+        }
+    }
+
+    /// <summary>
+    /// Opretter momsposteringer for indgående moms (INDG)
+    /// </summary>
+    private static List<Postering> CreateMomsPosteringerForIndgående(Postering originalPostering, decimal momsBeløb, int tilgodehavendeMomsKonto)
+    {
+        var momsPosteringer = new List<Postering>();
+
+        // Momspostering på samme konto (negativ hvis original er positiv og omvendt)
+        var momsPostering1 = new Postering
+        {
+            Dato = originalPostering.Dato,
+            Bilagsnummer = originalPostering.Bilagsnummer,
+            Konto = originalPostering.Konto,
+            Tekst = $"Moms af {originalPostering.Tekst}",
+            Beløb = originalPostering.Beløb >= 0 ? -momsBeløb : momsBeløb,
+            CsvFil = "Autogenereret"
+        };
+
+        // Modpostering på tilgodehavende moms konto
+        var momsPostering2 = new Postering
+        {
+            Dato = originalPostering.Dato,
+            Bilagsnummer = originalPostering.Bilagsnummer,
+            Konto = tilgodehavendeMomsKonto,
+            Tekst = $"Moms af {originalPostering.Tekst}",
+            Beløb = originalPostering.Beløb >= 0 ? momsBeløb : -momsBeløb,
+            CsvFil = "Autogenereret"
+        };
+
+        momsPosteringer.Add(momsPostering1);
+        momsPosteringer.Add(momsPostering2);
+        return momsPosteringer;
+    }
+
+    /// <summary>
+    /// Opretter momsposteringer for udgående moms (UDG)
+    /// </summary>
+    private static List<Postering> CreateMomsPosteringerForUdgående(Postering originalPostering, decimal momsBeløb, int skyldigMomsKonto)
+    {
+        var momsPosteringer = new List<Postering>();
+
+        // Momspostering på samme konto (positiv hvis original er negativ og omvendt)
+        var momsPostering1 = new Postering
+        {
+            Dato = originalPostering.Dato,
+            Bilagsnummer = originalPostering.Bilagsnummer,
+            Konto = originalPostering.Konto,
+            Tekst = $"Moms af {originalPostering.Tekst}",
+            Beløb = originalPostering.Beløb >= 0 ? momsBeløb : -momsBeløb,
+            CsvFil = "Autogenereret"
+        };
+
+        // Modpostering på skyldig moms konto
+        var momsPostering2 = new Postering
+        {
+            Dato = originalPostering.Dato,
+            Bilagsnummer = originalPostering.Bilagsnummer,
+            Konto = skyldigMomsKonto,
+            Tekst = $"Moms af {originalPostering.Tekst}",
+            Beløb = originalPostering.Beløb >= 0 ? -momsBeløb : momsBeløb,
+            CsvFil = "Autogenereret"
+        };
+
+        momsPosteringer.Add(momsPostering1);
+        momsPosteringer.Add(momsPostering2);
+        return momsPosteringer;
     }
 }

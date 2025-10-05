@@ -1,11 +1,11 @@
 Dato;Bilagsnummer;Konto;Tekst;Beløb
 01-01-2025;1001;1000;Åbningsbalance bank;100000,00
 01-01-2025;1001;2000;Åbningsbalance indskudskapital;-100000,00
-15-01-2025;1002;4000;Kontorartikler købt;-850,00
-15-01-2025;1002;1000;Betaling kontorartikler;850,00
-20-01-2025;1003;100;Salg af varer;-25000,00
+15-01-2025;1002;3000;Varekøb fra leverandør;-1000,00
+15-01-2025;1002;1000;Betaling varekøb;1000,00
+20-01-2025;1003;100;Salg af varer til kunde;-25000,00
 20-01-2025;1003;1000;Modtaget betaling;25000,00
 25-01-2025;1004;5000;Lønninger;-15000,00
 25-01-2025;1004;1000;Udbetalt løn;15000,00
-30-01-2025;1005;4000;Husleje;-8000,00
-30-01-2025;1005;1000;Betalt husleje;8000,00
+30-01-2025;1005;4000;Kontorudgifter;-1000,00
+30-01-2025;1005;1000;Betalt kontorudgifter;1000,00
