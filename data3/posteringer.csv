@@ -1,3 +1,2 @@
-Dato;Bilagsnummer;Konto;Tekst;Beløb
-01-02-2025;2001;100;Gebyr;125,00
-01-02-2025;2001;1000;Gebyr;-125
+Dato;Bilagsnummer;Konto;Tekst;Beløb;Modkonto
+01-02-2025;1;100;Gebyr;125,00;1000

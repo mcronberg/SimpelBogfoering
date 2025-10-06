@@ -10,6 +10,7 @@ Dette program hjælper dig med at:
 - Automatisk beregne og bogføre moms
 - Håndtere åbningsbalancer (primo)
 - Generere regnskabsrapporter
+- Visuelle T-konti (perfekt til at lære bogføring)
 - Eksportere data til Excel
 
 ## 🚀 Sådan starter du programmet
@@ -259,7 +260,31 @@ Dato       Bilag  Konto  Tekst              Beløb
 15-01-2025  1001   1000  Salg til kunde A   -1.000,00
 ```
 
-### 5. Excel-filer (CSV)
+### 5. `tkonto.html` - Visuelle T-konti 📚
+En interaktiv HTML rapport med **T-konti** - perfekt til at lære bogføring visuelt!
+
+```html
+        Bank (1000)
+    ________________
+    |              |
+    | Debet        | Kredit
+    |______________|_______|
+    | (-1) 25,00   | 125,00 (2001)
+    |              |
+    |______________|_______|
+    | Sum: 25,00   | Sum: 125,00
+    |______________|_______|
+    | Saldo: -100,00 |
+    |________________|
+```
+
+**Hvordan T-konti virker:**
+- **Venstre side (Debet)**: Positive beløb - indtægter for drift, indbetalinger for status
+- **Højre side (Kredit)**: Negative beløb - udgifter for drift, udbetalinger for status  
+- **Bilagsnummer**: I parenteser - (2001) før beløb til venstre, efter beløb til højre
+- **Saldo**: Debet minus kredit - viser den endelige saldo
+
+### 6. Excel-filer (CSV)
 - `balance.csv` - Til import i Excel
 - `posteringsliste.csv` - Til import i Excel
 
@@ -334,17 +359,18 @@ Dato;Bilagsnummer;Konto;Tekst;Beløb;Modkonto
 dotnet run --input eksempel_firma
 ```
 
-**Resultat:** Rapporter i `eksempel_firma\out` med automatisk moms!
+**Resultat:** Rapporter i `eksempel_firma\out` med automatisk moms og T-konti!
 
 ## 🎓 Tips til studerende
 
 1. **Start simpelt** - Begynd med få konti og transaktioner
 2. **Brug modkonto** - Nemmere bogføring med automatiske modposteringer
-3. **Tjek altid balancen** - Hver posteringsfil skal summere til 0
-4. **Forstå moms** - Programmet hjælper, men du skal vide hvornår der er moms
-5. **Brug primo korrekt** - Kun på statuskonti med negative bilagsnumre
-6. **Læs fejlmeddelelserne** - De fortæller præcist hvad der er galt
-7. **Eksperimenter** - Lav testdata og se hvordan rapporterne ser ud
+3. **Studer T-konti** - Åbn `tkonto.html` i din browser for at forstå debet/kredit visuelt
+4. **Tjek altid balancen** - Hver posteringsfil skal summere til 0
+5. **Forstå moms** - Programmet hjælper, men du skal vide hvornår der er moms
+6. **Brug primo korrekt** - Kun på statuskonti med negative bilagsnumre
+7. **Læs fejlmeddelelserne** - De fortæller præcist hvad der er galt
+8. **Eksperimenter** - Lav testdata og se hvordan rapporterne ser ud
 
 ## 📞 Hjælp
 

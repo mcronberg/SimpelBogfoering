@@ -203,6 +203,7 @@ public class App
             GenerateBalanceReport();
             GenerateKontokortReports();
             GeneratePosteringslisteReport();
+            GenerateTKontoReport();
             GenerateCSVReports();
             _logger.LogInformation("Rapporter genereret succesfuldt");
         }
@@ -540,5 +541,160 @@ public class App
         // Gem fil
         File.WriteAllText(outputPath, content.ToString(), System.Text.Encoding.UTF8);
         _logger.LogInformation("Posteringsliste CSV gemt: {FilePath}", outputPath);
+    }
+
+    /// <summary>
+    /// Genererer T-konto rapport i HTML format med Tailwind CSS
+    /// </summary>
+    private void GenerateTKontoReport()
+    {
+        var outputPath = Path.Combine(_commandArgs.Input, "out", "tkonto.html");
+        var regnskab = _regnskabService.Regnskab;
+        var alleKonti = _kontoplanService.GetAlleKonti().OrderBy(k => k.Nr).ToList();
+        var allePosteringer = _posteringService.GetAllePosteringer().OrderBy(p => p.Dato).ThenBy(p => p.Bilagsnummer).ToList();
+
+        // Grupper konti efter type
+        var driftKonti = alleKonti.Where(k => string.Equals(k.Type, "drift", StringComparison.OrdinalIgnoreCase)).ToList();
+        var statusKonti = alleKonti.Where(k => string.Equals(k.Type, "status", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        var content = new StringBuilder();
+
+        // HTML header med Tailwind CSS
+        content.AppendLine("<!DOCTYPE html>");
+        content.AppendLine("<html lang=\"da\">");
+        content.AppendLine("<head>");
+        content.AppendLine("    <meta charset=\"UTF-8\">");
+        content.AppendLine("    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
+        content.AppendLine(CultureInfo.InvariantCulture, $"    <title>T-Konti - {regnskab.RegnskabsNavn}</title>");
+        content.AppendLine("    <script src=\"https://cdn.tailwindcss.com\"></script>");
+        content.AppendLine("    <style>");
+        content.AppendLine("        @media print { .no-print { display: none; } }");
+        content.AppendLine("    </style>");
+        content.AppendLine("</head>");
+        content.AppendLine("<body class=\"bg-gray-50 p-8\">");
+        
+        // Header
+        content.AppendLine(CultureInfo.InvariantCulture, $"    <h1 class=\"text-3xl font-bold text-center mb-8\">T-Konti: {regnskab.RegnskabsNavn}</h1>");
+        content.AppendLine(CultureInfo.InvariantCulture, $"    <p class=\"text-center text-gray-600 mb-8\">Periode: {regnskab.PeriodeFra:dd-MM-yyyy} til {regnskab.PeriodeTil:dd-MM-yyyy}</p>");
+
+        // Grid med to kolonner
+        content.AppendLine("    <div class=\"grid grid-cols-2 gap-8\">");
+
+        // Drift konti (venstre kolonne)
+        GenerateTKontoKolonne(content, "DRIFT KONTI", driftKonti, allePosteringer);
+
+        // Status konti (højre kolonne)  
+        GenerateTKontoKolonne(content, "STATUS KONTI", statusKonti, allePosteringer);
+
+        content.AppendLine("    </div>");
+        content.AppendLine("</body>");
+        content.AppendLine("</html>");
+
+        // Gem fil
+        File.WriteAllText(outputPath, content.ToString(), System.Text.Encoding.UTF8);
+        _logger.LogInformation("T-konto rapport gemt: {FilePath}", outputPath);
+    }
+
+    /// <summary>
+    /// Genererer en kolonne med T-konti for en specifik kontotype
+    /// </summary>
+    private void GenerateTKontoKolonne(StringBuilder content, string titel, List<Models.Konto> konti, List<Models.Postering> allePosteringer)
+    {
+        content.AppendLine("        <div>");
+        content.AppendLine($"            <h2 class=\"text-2xl font-bold mb-6 text-center\">{titel}</h2>");
+
+        foreach (var konto in konti)
+        {
+            var kontoPosteringer = allePosteringer.Where(p => p.Konto == konto.Nr).ToList();
+            if (!kontoPosteringer.Any()) continue;
+
+            GenerateTKonto(content, konto, kontoPosteringer);
+        }
+
+        content.AppendLine("        </div>");
+    }
+
+    /// <summary>
+    /// Genererer en enkelt T-konto
+    /// </summary>
+    private void GenerateTKonto(StringBuilder content, Models.Konto konto, List<Models.Postering> posteringer)
+    {
+        // Grupper posteringer i debet og kredit
+        var debetPosteringer = new List<Models.Postering>();
+        var kreditPosteringer = new List<Models.Postering>();
+
+        foreach (var postering in posteringer)
+        {
+            // Alle konti: positive beløb = debet (venstre), negative beløb = kredit (højre)
+            if (postering.Beløb > 0)
+                debetPosteringer.Add(postering);
+            else
+                kreditPosteringer.Add(postering);
+        }
+
+        var debetSum = debetPosteringer.Sum(p => Math.Abs(p.Beløb));
+        var kreditSum = kreditPosteringer.Sum(p => Math.Abs(p.Beløb));
+        var saldo = debetSum - kreditSum;
+
+        // T-konto container
+        content.AppendLine("            <div class=\"border-2 border-gray-800 mb-6 bg-white\">");
+        
+        // Konto header
+        content.AppendLine("                <div class=\"text-center font-bold bg-gray-100 p-2 border-b border-gray-800\">");
+        content.AppendLine(CultureInfo.InvariantCulture, $"                    {konto.Nr} - {konto.Navn}");
+        content.AppendLine("                </div>");
+
+        // T-konto indhold
+        content.AppendLine("                <div class=\"grid grid-cols-2 min-h-32\">");
+
+        GenerateTKontoDebetSide(content, debetPosteringer, debetSum);
+        GenerateTKontoKreditSide(content, kreditPosteringer, kreditSum);
+
+        content.AppendLine("                </div>");
+
+        // Saldo sektion
+        content.AppendLine("                <div class=\"border-t border-gray-800 bg-gray-50 p-2\">");
+        content.AppendLine(CultureInfo.InvariantCulture, $"                    <div class=\"text-center font-bold\">Saldo: {saldo:N2}</div>");
+        content.AppendLine("                </div>");
+
+        content.AppendLine("            </div>");
+    }
+
+    /// <summary>
+    /// Genererer debet siden af T-kontoen
+    /// </summary>
+    private void GenerateTKontoDebetSide(StringBuilder content, List<Models.Postering> debetPosteringer, decimal debetSum)
+    {
+        content.AppendLine("                    <div class=\"border-r border-gray-800 p-3\">");
+        content.AppendLine("                        <div class=\"text-center font-semibold mb-2\">Debet</div>");
+        foreach (var postering in debetPosteringer.OrderBy(p => p.Dato).ThenBy(p => p.Bilagsnummer))
+        {
+            content.AppendLine(CultureInfo.InvariantCulture, $"                        <div class=\"text-right text-sm\">({postering.Bilagsnummer}) {Math.Abs(postering.Beløb):N2}</div>");
+        }
+        if (debetPosteringer.Any())
+        {
+            content.AppendLine("                        <hr class=\"my-2 border-gray-400\">");
+            content.AppendLine(CultureInfo.InvariantCulture, $"                        <div class=\"text-right font-semibold\">Sum: {debetSum:N2}</div>");
+        }
+        content.AppendLine("                    </div>");
+    }
+
+    /// <summary>
+    /// Genererer kredit siden af T-kontoen
+    /// </summary>
+    private void GenerateTKontoKreditSide(StringBuilder content, List<Models.Postering> kreditPosteringer, decimal kreditSum)
+    {
+        content.AppendLine("                    <div class=\"p-3\">");
+        content.AppendLine("                        <div class=\"text-center font-semibold mb-2\">Kredit</div>");
+        foreach (var postering in kreditPosteringer.OrderBy(p => p.Dato).ThenBy(p => p.Bilagsnummer))
+        {
+            content.AppendLine(CultureInfo.InvariantCulture, $"                        <div class=\"text-left text-sm\">{Math.Abs(postering.Beløb):N2} ({postering.Bilagsnummer})</div>");
+        }
+        if (kreditPosteringer.Any())
+        {
+            content.AppendLine("                        <hr class=\"my-2 border-gray-400\">");
+            content.AppendLine(CultureInfo.InvariantCulture, $"                        <div class=\"text-left font-semibold\">Sum: {kreditSum:N2}</div>");
+        }
+        content.AppendLine("                    </div>");
     }
 }
