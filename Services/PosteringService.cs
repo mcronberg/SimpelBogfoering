@@ -128,10 +128,13 @@ public class PosteringService
     private static void ValidateCSVHeader(string headerLine, string filNavn)
     {
         var expectedHeader = "Dato;Bilagsnummer;Konto;Tekst;Beløb";
-        if (!string.Equals(headerLine, expectedHeader, StringComparison.Ordinal))
+        var expectedHeaderWithModkonto = "Dato;Bilagsnummer;Konto;Tekst;Beløb;Modkonto";
+
+        if (!string.Equals(headerLine, expectedHeader, StringComparison.Ordinal) &&
+            !string.Equals(headerLine, expectedHeaderWithModkonto, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Ugyldig header i {filNavn}. Forventet: '{expectedHeader}', fandt: '{headerLine}'");
+                $"Ugyldig header i {filNavn}. Forventet: '{expectedHeader}' eller '{expectedHeaderWithModkonto}', fandt: '{headerLine}'");
         }
     }
 
@@ -168,6 +171,9 @@ public class PosteringService
                 }
 
                 posteringer.Add(postering);
+
+                // Generer automatisk modpostering hvis modkonto er angivet
+                await TilføjModposteringHvisNødvendigt(postering, posteringer, fejlListe, lineNumber).ConfigureAwait(false);
             }
             catch (Exception ex)
             {
@@ -192,9 +198,9 @@ public class PosteringService
     private static Postering ParsePosteringLine(string line, string filNavn, DateTime regnskabStartDato)
     {
         var fields = line.Split(';');
-        if (fields.Length != 5)
+        if (fields.Length != 5 && fields.Length != 6)
         {
-            throw new FormatException($"Ugyldig CSV format. Forventet 5 felter, fandt {fields.Length}");
+            throw new FormatException($"Ugyldig CSV format. Forventet 5 eller 6 felter, fandt {fields.Length}");
         }
 
         try
@@ -202,6 +208,17 @@ public class PosteringService
             var bilagsnummer = ParseInt(fields[1], "Bilagsnummer");
             var originalTekst = fields[3].Trim();
             var dato = ParseDato(fields[0]);
+
+            // Parse modkonto hvis angivet (6. felt)
+            int? modkonto = null;
+            if (fields.Length == 6 && !string.IsNullOrWhiteSpace(fields[5]))
+            {
+                var modkontoValue = ParseInt(fields[5], "Modkonto");
+                if (modkontoValue > 0)
+                {
+                    modkonto = modkontoValue;
+                }
+            }
 
             // Håndter primo posteringer (negative bilagsnumre)
             if (bilagsnummer < 0)
@@ -219,13 +236,48 @@ public class PosteringService
                 Konto = ParseInt(fields[2], "Konto"),
                 Tekst = originalTekst,
                 Beløb = ParseBeløb(fields[4]),
-                CsvFil = filNavn
+                CsvFil = filNavn,
+                Modkonto = modkonto
             };
         }
         catch (Exception ex)
         {
             throw new FormatException($"Fejl i parsing af linje: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Tilføjer automatisk modpostering hvis modkonto er angivet
+    /// </summary>
+    private async Task TilføjModposteringHvisNødvendigt(Postering postering, List<Postering> posteringer,
+        List<string> fejlListe, int lineNumber)
+    {
+        if (!postering.Modkonto.HasValue || postering.Modkonto.Value <= 0)
+            return;
+
+        var modpostering = new Postering
+        {
+            Dato = postering.Dato,
+            Bilagsnummer = postering.Bilagsnummer,
+            Konto = postering.Modkonto.Value,
+            Tekst = $"{postering.Tekst} (modpostering)",
+            Beløb = postering.Beløb * -1, // Omvendt fortegn
+            CsvFil = postering.CsvFil,
+            Modkonto = null // Modposteringen har ingen modkonto
+        };
+
+        // Validér modpostering
+        var validationResult = await _validator.ValidateAsync(modpostering).ConfigureAwait(false);
+        if (!validationResult.IsValid)
+        {
+            var errors = string.Join(", ", validationResult.Errors.Select(e => e.ErrorMessage));
+            fejlListe.Add($"Linje {lineNumber} (modpostering): {errors}");
+            return;
+        }
+
+        posteringer.Add(modpostering);
+        _logger.LogDebug("Genereret automatisk modpostering: Konto {Konto}, Beløb {Beløb}",
+            modpostering.Konto, modpostering.Beløb);
     }
 
     /// <summary>

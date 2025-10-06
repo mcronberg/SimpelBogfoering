@@ -35,6 +35,11 @@ public class Postering
     /// </summary>
     public string CsvFil { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Modkonto - hvis udfyldt oprettes automatisk modpostering
+    /// </summary>
+    public int? Modkonto { get; set; }
+
     public override string ToString()
     {
         return $"{Dato:yyyy-MM-dd} Bilag:{Bilagsnummer} Konto:{Konto} {Beløb:F2} - {Tekst} ({CsvFil})";

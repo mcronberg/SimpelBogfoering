@@ -65,6 +65,11 @@ public class PosteringValidator : AbstractValidator<Postering>
         RuleFor(p => p.CsvFil)
             .NotEmpty()
             .WithMessage("CSV filnavn skal være angivet");
+
+        // Modkonto skal være gyldig hvis angivet
+        RuleFor(p => p.Modkonto)
+            .Must(ModkontoErGyldig)
+            .WithMessage("Modkonto skal være mellem 1 og 1.000.000 og skal findes i kontoplanen");
     }
 
     private bool DatoErIndenForRegnskabsperiode(DateTime dato)
@@ -87,5 +92,18 @@ public class PosteringValidator : AbstractValidator<Postering>
         // For primo posteringer (negative bilagsnummer) skal kontoen være en statuskonto
         var konto = _kontoplanService.GetKonto(postering.Konto);
         return konto != null && string.Equals(konto.Type, "Status", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool ModkontoErGyldig(int? modkonto)
+    {
+        // Hvis modkonto ikke er angivet, er det ok
+        if (!modkonto.HasValue || modkonto.Value == 0)
+            return true;
+
+        // Modkonto skal være mellem 1 og 1.000.000 og findes i kontoplanen
+        if (modkonto.Value < 1 || modkonto.Value > 1_000_000)
+            return false;
+
+        return _kontoplanService.GetKonto(modkonto.Value) != null;
     }
 }

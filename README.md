@@ -6,6 +6,7 @@ En dansk bogførings-applikation til studerende som skal lære regnskab.
 
 Dette program hjælper dig med at:
 - Bogføre transaktioner (køb, salg, betalinger)
+- Smart modkonto funktionalitet (automatiske modposteringer)
 - Automatisk beregne og bogføre moms
 - Håndtere åbningsbalancer (primo)
 - Generere regnskabsrapporter
@@ -67,10 +68,17 @@ nr;navn;type;moms
 
 Opret filer der starter med `posteringer` (f.eks. `posteringer-jan.csv`, `posteringer-feb.csv`):
 
+**Grundformat (5 kolonner):**
 ```csv
 Dato;Bilagsnummer;Konto;Tekst;Beløb
 15-01-2025;1001;5000;Salg til kunde A;1000
 15-01-2025;1001;1000;Salg til kunde A;-1000
+```
+
+**Udvidet format med modkonto (6 kolonner):**
+```csv
+Dato;Bilagsnummer;Konto;Tekst;Beløb;Modkonto
+15-01-2025;1001;5000;Salg til kunde A;1000;1000
 ```
 
 **Forklaring af kolonner:**
@@ -79,22 +87,56 @@ Dato;Bilagsnummer;Konto;Tekst;Beløb
 - **Konto**: Kontonummer fra din kontoplan
 - **Tekst**: Beskrivelse af transaktionen
 - **Beløb**: Beløb UDEN moms (positive = indtægt/aktiv, negative = udgift/passiv)
+- **Modkonto** *(valgfri)*: Hvis angivet, oprettes automatisk modpostering
+
+## 🔄 Smart modkonto funktionalitet
+
+Hvis du bruger **modkonto kolonnen**, gør programmet bogføringen nemmere:
+
+**Du skriver kun:**
+```csv
+15-01-2025;1001;5000;Salg til kunde A;1000;1000
+```
+
+**Programmet opretter automatisk:**
+```csv
+15-01-2025;1001;5000;Salg til kunde A;1000
+15-01-2025;1001;1000;Salg til kunde A (modpostering);-1000
+```
+
+**Fordele:**
+- ✅ **Hurtigere**: Skriv kun én linje i stedet for to
+- ✅ **Færre fejl**: Automatisk korrekt fortegn på modpostering
+- ✅ **Moms fungerer**: Begge posteringer udløser automatisk moms
+- ✅ **Balancering**: Garanteret korrekt balance
 
 ## 💡 Hvordan fungerer dobbelt bogføring?
 
 Hver transaktion skal **balancere** - summen af alle beløb skal være 0.
 
-**Eksempel - Salg for 1.000 kr:**
+**Traditionel måde - Salg for 1.000 kr:**
 ```csv
 15-01-2025;1001;5000;Salg til kunde A;1000    (indtægt)
 15-01-2025;1001;1000;Salg til kunde A;-1000   (penge ind på bank)
 ```
 
-**Eksempel - Køb for 800 kr:**
+**Smart måde med modkonto - Salg for 1.000 kr:**
+```csv
+15-01-2025;1001;5000;Salg til kunde A;1000;1000
+```
+*(Programmet opretter automatisk modposteringen på konto 1000 med beløb -1000)*
+
+**Traditionel måde - Køb for 800 kr:**
 ```csv
 16-01-2025;1002;6000;Indkøb af varer;800      (udgift)
 16-01-2025;1002;1000;Indkøb af varer;-800     (penge ud af bank)
 ```
+
+**Smart måde med modkonto - Køb for 800 kr:**
+```csv
+16-01-2025;1002;6000;Indkøb af varer;800;1000
+```
+*(Programmet opretter automatisk modposteringen på konto 1000 med beløb -800)*
 
 ## 🧾 Automatisk moms
 
@@ -231,6 +273,10 @@ Dato       Bilag  Konto  Tekst              Beløb
 **Problem:** Du bruger et kontonummer som ikke er defineret
 **Løsning:** Tilføj kontoen til `kontoplan.csv` eller ret kontonummeret
 
+### "Modkonto skal findes i kontoplanen"
+**Problem:** Du har angivet en modkonto som ikke eksisterer
+**Løsning:** Tjek at modkonto nummeret findes i din `kontoplan.csv`
+
 ### "Primo posteringer må kun bogføres på statuskonti"
 **Problem:** Du forsøger primo på en driftskonto
 **Løsning:** Brug kun statuskonti (bank, kasse, gæld, egenkapital) til primo
@@ -267,13 +313,20 @@ Dato;Bilagsnummer;Konto;Tekst;Beløb
 ;-1;4000;Åbningsbalance;-10000
 ```
 
-**`posteringer-jan.csv`:**
+**`posteringer-jan.csv` (traditionel måde):**
 ```csv
 Dato;Bilagsnummer;Konto;Tekst;Beløb
 10-01-2025;1001;5000;Salg faktura 1001;2000
 10-01-2025;1001;1000;Salg faktura 1001;-2000
 15-01-2025;1002;6000;Indkøb af varer;1000
 15-01-2025;1002;1000;Indkøb af varer;-1000
+```
+
+**`posteringer-feb.csv` (smart måde med modkonto):**
+```csv
+Dato;Bilagsnummer;Konto;Tekst;Beløb;Modkonto
+05-02-2025;1003;5000;Salg faktura 1003;1500;1000
+12-02-2025;1004;6000;Indkøb materialer;800;1000
 ```
 
 **Kør programmet:**
@@ -286,11 +339,12 @@ dotnet run --input eksempel_firma
 ## 🎓 Tips til studerende
 
 1. **Start simpelt** - Begynd med få konti og transaktioner
-2. **Tjek altid balancen** - Hver posteringsfil skal summere til 0
-3. **Forstå moms** - Programmet hjælper, men du skal vide hvornår der er moms
-4. **Brug primo korrekt** - Kun på statuskonti med negative bilagsnumre
-5. **Læs fejlmeddelelserne** - De fortæller præcist hvad der er galt
-6. **Eksperimenter** - Lav testdata og se hvordan rapporterne ser ud
+2. **Brug modkonto** - Nemmere bogføring med automatiske modposteringer
+3. **Tjek altid balancen** - Hver posteringsfil skal summere til 0
+4. **Forstå moms** - Programmet hjælper, men du skal vide hvornår der er moms
+5. **Brug primo korrekt** - Kun på statuskonti med negative bilagsnumre
+6. **Læs fejlmeddelelserne** - De fortæller præcist hvad der er galt
+7. **Eksperimenter** - Lav testdata og se hvordan rapporterne ser ud
 
 ## 📞 Hjælp
 
