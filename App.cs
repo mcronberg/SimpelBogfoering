@@ -572,7 +572,7 @@ public class App
         content.AppendLine("    </style>");
         content.AppendLine("</head>");
         content.AppendLine("<body class=\"bg-gray-50 p-8\">");
-        
+
         // Header
         content.AppendLine(CultureInfo.InvariantCulture, $"    <h1 class=\"text-3xl font-bold text-center mb-8\">T-Konti: {regnskab.RegnskabsNavn}</h1>");
         content.AppendLine(CultureInfo.InvariantCulture, $"    <p class=\"text-center text-gray-600 mb-8\">Periode: {regnskab.PeriodeFra:dd-MM-yyyy} til {regnskab.PeriodeTil:dd-MM-yyyy}</p>");
@@ -638,7 +638,7 @@ public class App
 
         // T-konto container
         content.AppendLine("            <div class=\"border-2 border-gray-800 mb-6 bg-white\">");
-        
+
         // Konto header
         content.AppendLine("                <div class=\"text-center font-bold bg-gray-100 p-2 border-b border-gray-800\">");
         content.AppendLine(CultureInfo.InvariantCulture, $"                    {konto.Nr} - {konto.Navn}");
